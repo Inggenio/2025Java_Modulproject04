@@ -4,10 +4,43 @@ import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
+import java.text.SimpleDateFormat;
 
 
 
 public class AlphaVantageConnection {
+	public String symbol;
+	public PFUNCTION function;
+	public POUTPUT output;
+
+	public AlphaVantageConnection() {
+	}
+
+	public AlphaVantageConnection(String symbol, PFUNCTION function, POUTPUT output) {
+		this.symbol = symbol;
+		this.function = function;
+		this.output = output;
+	}
+
+	public String getSymbol() {
+		return symbol;
+	}
+
+	public PFUNCTION getFunction() {
+		return function;
+	}
+
+	public POUTPUT getOutput() {
+		return output;
+	}
+	public String filename(String symbol){
+		String timeStamp = new SimpleDateFormat("yyyy.MM.dd.HH.mm.ss").format(new java.util.Date());
+		return "JSON_Streams/Stream_" + timeStamp +"_sym_" + symbol + ".txt";
+
+	}
+	public String getFilename(){
+		return filename(symbol);
+	}
 
 	String BASE_url = "https://www.alphavantage.co/query?";
 	String API_Key ="CSAA3X0CNSYIUCT8";
@@ -24,7 +57,9 @@ public class AlphaVantageConnection {
 
 		String myURL = url.toString();
 		HttpURLConnection conn = (HttpURLConnection) new URL(myURL).openConnection();
-		FileWriter stream = new FileWriter("stream"+symbol+".txt");
+
+
+		FileWriter stream = new FileWriter(filename(symbol));
 
 		try {
 			System.out.println(myURL);
@@ -64,18 +99,19 @@ public class AlphaVantageConnection {
 		};
 	}
 
-
-	public static void main(String[] args) {
-		System.out.println("Connecting to AlphaVantage");
-		AlphaVantageConnection connection = new AlphaVantageConnection();
-		AlphaVantageJsonParser json = new AlphaVantageJsonParser();
-		try {
-			connection.connect("MMM", PFUNCTION.DAILY, POUTPUT.COMPACT);
-		} catch (IOException e) {
-			throw new RuntimeException(e);
-		}
-		//json.parseJsonToAktien()
-		System.out.println("End of Connection");
-	}
+//
+//	public static void main(String[] args) {
+//		System.out.println("Connecting to AlphaVantage");
+//		AlphaVantageConnection connection = new AlphaVantageConnection("MMM",PFUNCTION.DAILY, POUTPUT.COMPACT);
+//		AlphaVantageJsonParser json = new AlphaVantageJsonParser();
+//		try {
+//			connection.connect("MMM", PFUNCTION.DAILY, POUTPUT.COMPACT);
+//		} catch (IOException e) {
+//			throw new RuntimeException(e);
+//		}
+//
+//
+//		System.out.println("End of Connection");
+//	}
 
 }
