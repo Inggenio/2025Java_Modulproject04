@@ -6,30 +6,39 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-
 public class AlphaVantageJsonParser {
-
 
 	public List<Aktie> parseJsonToAktien(String jsonString, String symbol) {
 		List<Aktie> aktienList = new ArrayList<>();
 
+		if (jsonString == null || jsonString.trim().isEmpty()) {
+			System.err.println("JSON String ist leer oder null");
+			return aktienList;
+		}
+
 		try {
 			// Error Handling - prüfen ob API-Fehler
 			if (hasApiError(jsonString)) {
-				return aktienList; // Leere Liste zurückgeben
+				return aktienList;
 			}
 
 			// Time Series Daten extrahieren
 			String timeSeriesData = extractTimeSeriesData(jsonString);
 			if (timeSeriesData == null) {
 				System.err.println("Keine Time Series Daten gefunden in JSON Response");
+				printJsonResponse(jsonString); // Debug-Output
 				return aktienList;
 			}
 
 			// Einzelne Datumseinträge parsen
 			aktienList = parseDateEntries(timeSeriesData, symbol);
 
-			System.out.println("Erfolgreich " + aktienList.size() + " Aktien-Datensätze geparst");
+			if (aktienList.isEmpty()) {
+				System.err.println("Keine Aktien-Datensätze geparst - prüfe JSON Format");
+				printJsonResponse(jsonString.substring(0, Math.min(500, jsonString.length()))); // Ersten 500 Zeichen ausgeben
+			} else {
+				System.out.println("Erfolgreich " + aktienList.size() + " Aktien-Datensätze geparst");
+			}
 
 		} catch (Exception e) {
 			System.err.println("JSON Parsing Fehler: " + e.getMessage());
@@ -39,29 +48,38 @@ public class AlphaVantageJsonParser {
 		return aktienList;
 	}
 
-
 	private boolean hasApiError(String jsonString) {
 		if (jsonString.contains("\"Error Message\"")) {
 			System.err.println("API Error gefunden in Response");
+			// Extrahiere und zeige die konkrete Fehlermeldung
+			Pattern errorPattern = Pattern.compile("\"Error Message\":\\s*\"([^\"]+)\"");
+			Matcher matcher = errorPattern.matcher(jsonString);
+			if (matcher.find()) {
+				System.err.println("Fehlermeldung: " + matcher.group(1));
+			}
 			return true;
 		}
 
 		if (jsonString.contains("\"Note\"")) {
 			System.err.println("API Note - möglicherweise Rate Limit erreicht");
+			Pattern notePattern = Pattern.compile("\"Note\":\\s*\"([^\"]+)\"");
+			Matcher matcher = notePattern.matcher(jsonString);
+			if (matcher.find()) {
+				System.err.println("Note: " + matcher.group(1));
+			}
 			return true;
 		}
 
 		return false;
 	}
 
-
 	private String extractTimeSeriesData(String jsonString) {
-		// Pattern für verschiedene Time Series Typen
+		// Verbesserte Regex-Patterns für nested JSON
 		String[] timeSeriesPatterns = {
-				"\"Time Series \\(Daily\\)\":\\s*\\{([^}]+(?:\\{[^}]*\\}[^}]*)*)\\}",
-				"\"Time Series \\(Weekly\\)\":\\s*\\{([^}]+(?:\\{[^}]*\\}[^}]*)*)\\}",
-				"\"Time Series \\(Monthly\\)\":\\s*\\{([^}]+(?:\\{[^}]*\\}[^}]*)*)\\}",
-				"\"Time Series \\(5min\\)\":\\s*\\{([^}]+(?:\\{[^}]*\\}[^}]*)*)\\}"
+				"\"Time Series \\(Daily\\)\":\\s*\\{([\\s\\S]*?)\\}(?=\\s*\\}\\s*$)",
+				"\"Time Series \\(Weekly\\)\":\\s*\\{([\\s\\S]*?)\\}(?=\\s*\\}\\s*$)",
+				"\"Time Series \\(Monthly\\)\":\\s*\\{([\\s\\S]*?)\\}(?=\\s*\\}\\s*$)",
+				"\"Time Series \\(5min\\)\":\\s*\\{([\\s\\S]*?)\\}(?=\\s*\\}\\s*$)"
 		};
 
 		for (String patternString : timeSeriesPatterns) {
@@ -73,14 +91,13 @@ public class AlphaVantageJsonParser {
 			}
 		}
 
-		return null; // Keine Time Series gefunden
+		return null;
 	}
-
 
 	private List<Aktie> parseDateEntries(String timeSeriesData, String symbol) {
 		List<Aktie> aktienList = new ArrayList<>();
 
-		// Pattern für Datumseinträge: "2024-01-15": { ... }
+		// Verbesserte Regex für Datumseinträge
 		String datePattern = "\"(\\d{4}-\\d{2}-\\d{2})\":\\s*\\{([^}]+)\\}";
 		Pattern datePatternCompiled = Pattern.compile(datePattern);
 		Matcher dateMatcher = datePatternCompiled.matcher(timeSeriesData);
@@ -103,17 +120,21 @@ public class AlphaVantageJsonParser {
 		return aktienList;
 	}
 
-
 	private Aktie parseAktieFromData(String dateString, String dataString, String symbol) {
 		try {
 			LocalDate date = LocalDate.parse(dateString);
 
-			// OHLCV Werte extrahieren
-			double open = extractValue(dataString, "1\\. open");
-			double high = extractValue(dataString, "2\\. high");
-			double low = extractValue(dataString, "3\\. low");
-			double close = extractValue(dataString, "4\\. close");
-			long volume = (long) extractValue(dataString, "5\\. volume");
+			// OHLCV Werte extrahieren mit besserer Fehlerbehandlung
+			Double open = extractValueSafe(dataString, "1\\. open");
+			Double high = extractValueSafe(dataString, "2\\. high");
+			Double low = extractValueSafe(dataString, "3\\. low");
+			Double close = extractValueSafe(dataString, "4\\. close");
+			Long volume = extractVolumeSafe(dataString, "5\\. volume");
+
+			if (open == null || high == null || low == null || close == null || volume == null) {
+				System.err.println("Unvollständige Daten für " + dateString);
+				return null;
+			}
 
 			return new Aktie(date, symbol, high, open, low, close, volume);
 
@@ -123,6 +144,23 @@ public class AlphaVantageJsonParser {
 		}
 	}
 
+	private Double extractValueSafe(String dataString, String key) {
+		try {
+			return extractValue(dataString, key);
+		} catch (Exception e) {
+			System.err.println("Wert für " + key + " nicht gefunden oder ungültig");
+			return null;
+		}
+	}
+
+	private Long extractVolumeSafe(String dataString, String key) {
+		try {
+			return (long) extractValue(dataString, key);
+		} catch (Exception e) {
+			System.err.println("Volume für " + key + " nicht gefunden oder ungültig");
+			return null;
+		}
+	}
 
 	private double extractValue(String dataString, String key) {
 		String valuePattern = "\"" + key + "\":\\s*\"([^\"]+)\"";
@@ -130,16 +168,16 @@ public class AlphaVantageJsonParser {
 		Matcher matcher = pattern.matcher(dataString);
 
 		if (matcher.find()) {
-			return Double.parseDouble(matcher.group(1));
+			String value = matcher.group(1);
+			return Double.parseDouble(value);
 		}
 
 		throw new RuntimeException("Wert für " + key + " nicht gefunden");
 	}
 
-
 	public void printJsonResponse(String jsonString) {
-		System.out.println("=== JSON Response ===");
+		System.out.println("=== JSON Response (Debug) ===");
 		System.out.println(jsonString);
-		System.out.println("===================");
+		System.out.println("=============================");
 	}
 }
