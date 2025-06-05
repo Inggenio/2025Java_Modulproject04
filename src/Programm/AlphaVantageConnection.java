@@ -58,8 +58,16 @@ public class AlphaVantageConnection {
 		String myURL = url.toString();
 		HttpURLConnection conn = (HttpURLConnection) new URL(myURL).openConnection();
 
+	 	String filepath = filename(symbol);
+	 	File myFile = new File(filepath);
 
-		FileWriter stream = new FileWriter(filename(symbol));
+
+		File parentDir = myFile.getParentFile();
+		if (parentDir != null && !parentDir.exists()) {
+			parentDir.mkdirs();
+		}
+
+		FileWriter stream = new FileWriter(myFile);
 
 		try {
 			System.out.println(myURL);
@@ -78,8 +86,6 @@ public class AlphaVantageConnection {
 		}
 	}
 
-
-
 	public String urlOutput(POUTPUT output){
 		return switch (output){
 			case POUTPUT.COMPACT -> "outputsize=compact";
@@ -87,8 +93,6 @@ public class AlphaVantageConnection {
 
 		};
 	}
-
-
 
 	public String urlFunction(PFUNCTION function){
 		return switch (function){
@@ -99,7 +103,7 @@ public class AlphaVantageConnection {
 		};
 	}
 
-//
+
 //	public static void main(String[] args) {
 //		System.out.println("Connecting to AlphaVantage");
 //		AlphaVantageConnection connection = new AlphaVantageConnection("MMM",PFUNCTION.DAILY, POUTPUT.COMPACT);
